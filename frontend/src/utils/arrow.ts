@@ -23,9 +23,43 @@ export async function fetchArrowData(url: string): Promise<Table> {
 
 /**
  * 将Arrow Table转换为普通JS对象数组
+ * 自动将 BigInt 转换为 Number 以避免类型混合错误
  */
 export function tableToArray<T = any>(table: Table): T[] {
-  return table.toArray().map(row => row.toJSON()) as T[]
+  return table.toArray().map(row => {
+    const obj = row.toJSON()
+    // 递归转换所有 BigInt 为 Number
+    return convertBigIntToNumber(obj)
+  }) as T[]
+}
+
+/**
+ * 递归将对象中的所有 BigInt 转换为 Number
+ */
+function convertBigIntToNumber(obj: any): any {
+  if (obj === null || obj === undefined) {
+    return obj
+  }
+
+  if (typeof obj === 'bigint') {
+    return Number(obj)
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map(convertBigIntToNumber)
+  }
+
+  if (typeof obj === 'object') {
+    const result: any = {}
+    for (const key in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        result[key] = convertBigIntToNumber(obj[key])
+      }
+    }
+    return result
+  }
+
+  return obj
 }
 
 /**

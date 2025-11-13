@@ -1,5 +1,6 @@
 services:
   backend:
+    container_name: arrow-backend
     build:
       context: ./backend
     volumes:
@@ -10,6 +11,7 @@ services:
       - lprintf
 
   frontend:
+    container_name: arrow-frontend
     build:
       context: ./frontend
       dockerfile: Dockerfile

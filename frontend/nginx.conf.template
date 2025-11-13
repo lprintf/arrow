@@ -10,9 +10,9 @@ server {
     gzip_min_length 1024;
     gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript application/vnd.apache.arrow.stream;
 
-    # 代理API请求到后端
+    # 代理API请求到后端（使用容器名避免 DNS 冲突）
     location /api/ {
-        proxy_pass http://backend:8000/api/;
+        proxy_pass http://arrow-backend:8000/api/;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;

@@ -36,7 +36,7 @@ def generate_base_metrics():
     onsite_web_purchase_value = round(onsite_web_purchase * random.uniform(50, 500), 2)
 
     return {
-        'spend': spend,
+        'cost': spend,  # 前端使用 cost 字段
         'impressions': impressions,
         'reach': reach,
         'clicks': clicks,
@@ -45,10 +45,10 @@ def generate_base_metrics():
         'landing_page_view': landing_page_view,
         'onsite_web_checkout': onsite_web_checkout,
         'onsite_web_add_to_cart': onsite_web_add_to_cart,
-        'onsite_web_purchase': onsite_web_purchase,
+        'conversions': onsite_web_purchase,  # 前端使用 conversions 字段
         'onsite_web_checkout_value': onsite_web_checkout_value,
         'onsite_web_add_to_cart_value': onsite_web_add_to_cart_value,
-        'onsite_web_purchase_value': onsite_web_purchase_value,
+        'gmv': onsite_web_purchase_value,  # 前端使用 gmv 字段
     }
 
 
@@ -109,16 +109,39 @@ def generate_ad_report(num_campaigns=100, num_ad_sets_per_campaign=5, num_ads_pe
                     metrics = generate_base_metrics()
                     ads_data.append({
                         'date': date,
-                        'advertiser_id': advertiser_id,
-                        'campaign_id': campaign_id,
+                        'advertiser_id': f"ADV{advertiser_id:04d}",  # ID 改为字符串
+                        'campaign_id': f"CMP{campaign_id:06d}",      # ID 改为字符串
                         'campaign_type': campaign_type,
-                        'ad_set_id': ad_set_id,
-                        'ad_id': ad_id,
+                        'ad_set_id': f"ADS{ad_set_id:08d}",         # ID 改为字符串
+                        'ad_id': f"AD{ad_id:010d}",                 # ID 改为字符串
                         **metrics
                     })
 
-    # 转换为Arrow表格
-    ads_table = pa.Table.from_pylist(ads_data)
+    # 定义 Arrow schema，明确指定字段类型
+    schema = pa.schema([
+        ('date', pa.date32()),
+        ('advertiser_id', pa.string()),
+        ('campaign_id', pa.string()),
+        ('campaign_type', pa.string()),
+        ('ad_set_id', pa.string()),
+        ('ad_id', pa.string()),
+        ('cost', pa.float32()),
+        ('impressions', pa.int32()),
+        ('reach', pa.int32()),
+        ('clicks', pa.int32()),
+        ('inline_link_clicks', pa.int32()),
+        ('outbound_clicks', pa.int32()),
+        ('landing_page_view', pa.int32()),
+        ('onsite_web_checkout', pa.int32()),
+        ('onsite_web_add_to_cart', pa.int32()),
+        ('conversions', pa.int32()),
+        ('onsite_web_checkout_value', pa.float32()),
+        ('onsite_web_add_to_cart_value', pa.float32()),
+        ('gmv', pa.float32()),
+    ])
+
+    # 转换为Arrow表格，使用指定的 schema
+    ads_table = pa.Table.from_pylist(ads_data, schema=schema)
 
     print(f"\n生成完成:")
     print(f"  - 记录数: {len(ads_data):,}条")
@@ -163,14 +186,14 @@ def generate_user_sku_logs(num_users=10000, num_skus=5000, num_events=1000000,
 
         # 生成广告归因信息（用户从哪个广告来的）
         # SKU与广告是多对多关系，同一个SKU可以出现在不同广告中
-        campaign_id = random.randint(1, num_campaigns)
-        ad_set_id = random.randint(
-            (campaign_id - 1) * num_ad_sets_per_campaign + 1,
-            campaign_id * num_ad_sets_per_campaign
+        campaign_id_num = random.randint(1, num_campaigns)
+        ad_set_id_num = random.randint(
+            (campaign_id_num - 1) * num_ad_sets_per_campaign + 1,
+            campaign_id_num * num_ad_sets_per_campaign
         )
-        ad_id = random.randint(
-            (ad_set_id - 1) * num_ads_per_ad_set + 1,
-            ad_set_id * num_ads_per_ad_set
+        ad_id_num = random.randint(
+            (ad_set_id_num - 1) * num_ads_per_ad_set + 1,
+            ad_set_id_num * num_ads_per_ad_set
         )
 
         # 构建扩展属性（稀疏）
@@ -190,17 +213,29 @@ def generate_user_sku_logs(num_users=10000, num_skus=5000, num_events=1000000,
             'user_id': user_id,
             'sku_id': sku_id,
             'event_type': event_type,
-            'campaign_id': campaign_id,  # 广告归因：系列
-            'ad_set_id': ad_set_id,      # 广告归因：广告组
-            'ad_id': ad_id,              # 广告归因：广告
+            'campaign_id': f"CMP{campaign_id_num:06d}",  # ID 改为字符串
+            'ad_set_id': f"ADS{ad_set_id_num:08d}",      # ID 改为字符串
+            'ad_id': f"AD{ad_id_num:010d}",              # ID 改为字符串
             'attrs': json.dumps(attrs) if attrs else None,  # 将扩展属性序列化为JSON字符串
         })
 
     # 按时间排序
     data.sort(key=lambda x: x['ts'])
 
-    # 转换为Arrow表格
-    table = pa.Table.from_pylist(data)
+    # 定义 Arrow schema
+    schema = pa.schema([
+        ('ts', pa.timestamp('us')),
+        ('user_id', pa.string()),
+        ('sku_id', pa.string()),
+        ('event_type', pa.string()),
+        ('campaign_id', pa.string()),
+        ('ad_set_id', pa.string()),
+        ('ad_id', pa.string()),
+        ('attrs', pa.string()),
+    ])
+
+    # 转换为Arrow表格，使用指定的 schema
+    table = pa.Table.from_pylist(data, schema=schema)
 
     print(f"生成完成: {len(data)}条记录")
     print(f"内存大小: {table.nbytes / 1024 / 1024:.2f} MB")
