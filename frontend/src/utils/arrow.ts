@@ -34,7 +34,7 @@ export function tableToArray<T = any>(table: Table): T[] {
 }
 
 /**
- * 递归将对象中的所有 BigInt 转换为 Number
+ * 递归将对象中的所有 BigInt 转换为 Number，Date 转换为字符串
  */
 function convertBigIntToNumber(obj: any): any {
   if (obj === null || obj === undefined) {
@@ -43,6 +43,14 @@ function convertBigIntToNumber(obj: any): any {
 
   if (typeof obj === 'bigint') {
     return Number(obj)
+  }
+
+  // 处理 Date 对象，转换为 YYYY-MM-DD 格式
+  if (obj instanceof Date) {
+    const year = obj.getFullYear()
+    const month = String(obj.getMonth() + 1).padStart(2, '0')
+    const day = String(obj.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
   }
 
   if (Array.isArray(obj)) {

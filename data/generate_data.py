@@ -109,11 +109,11 @@ def generate_ad_report(num_campaigns=100, num_ad_sets_per_campaign=5, num_ads_pe
                     metrics = generate_base_metrics()
                     ads_data.append({
                         'date': date,
-                        'advertiser_id': f"ADV{advertiser_id:04d}",  # ID 改为字符串
-                        'campaign_id': f"CMP{campaign_id:06d}",      # ID 改为字符串
+                        'advertiser_id': f"ADV{advertiser_id:04d}",
+                        'campaign_id': f"CMP{campaign_id:06d}",
                         'campaign_type': campaign_type,
-                        'ad_set_id': f"ADS{ad_set_id:08d}",         # ID 改为字符串
-                        'ad_id': f"AD{ad_id:010d}",                 # ID 改为字符串
+                        'ad_set_id': f"ADS{ad_set_id:08d}",
+                        'ad_id': f"AD{ad_id:010d}",
                         **metrics
                     })
 
@@ -213,9 +213,9 @@ def generate_user_sku_logs(num_users=10000, num_skus=5000, num_events=1000000,
             'user_id': user_id,
             'sku_id': sku_id,
             'event_type': event_type,
-            'campaign_id': f"CMP{campaign_id_num:06d}",  # ID 改为字符串
-            'ad_set_id': f"ADS{ad_set_id_num:08d}",      # ID 改为字符串
-            'ad_id': f"AD{ad_id_num:010d}",              # ID 改为字符串
+            'campaign_id': f"CMP{campaign_id_num:06d}",
+            'ad_set_id': f"ADS{ad_set_id_num:08d}",
+            'ad_id': f"AD{ad_id_num:010d}",
             'attrs': json.dumps(attrs) if attrs else None,  # 将扩展属性序列化为JSON字符串
         })
 

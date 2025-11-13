@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Card, Row, Col, Statistic, Select, DatePicker, Spin, Alert, Table as AntTable } from 'antd'
+import { Card, Row, Col, Statistic, Select, DatePicker, Spin, Alert } from 'antd'
 import ReactECharts from 'echarts-for-react'
 import { fetchArrowData, tableToArray } from '../utils/arrow'
+import AdDetailTable from '../components/AdDetailTable'
 import * as aq from 'arquero'
 import dayjs, { type Dayjs } from 'dayjs'
 
@@ -9,9 +10,11 @@ const { RangePicker } = DatePicker
 
 interface AdReportRow {
   date: string
-  advertiser_id: number
-  campaign_id: number
+  advertiser_id: string
+  campaign_id: string
   campaign_type: string
+  ad_set_id: string
+  ad_id: string
   impressions: number
   clicks: number
   cost: number
@@ -212,17 +215,6 @@ export default function AdReport() {
     }
   }, [aggregatedData])
 
-  // 明细表格列
-  const columns = [
-    { title: '日期', dataIndex: 'date', key: 'date', width: 120 },
-    { title: '计划类型', dataIndex: 'campaign_type', key: 'campaign_type', width: 100 },
-    { title: '曝光量', dataIndex: 'impressions', key: 'impressions', width: 100 },
-    { title: '点击量', dataIndex: 'clicks', key: 'clicks', width: 100 },
-    { title: '花费', dataIndex: 'cost', key: 'cost', width: 100, render: (v: number) => `¥${v.toFixed(2)}` },
-    { title: '转化量', dataIndex: 'conversions', key: 'conversions', width: 100 },
-    { title: 'GMV', dataIndex: 'gmv', key: 'gmv', width: 120, render: (v: number) => `¥${v.toFixed(2)}` },
-  ]
-
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: '50px' }}>
@@ -298,16 +290,7 @@ export default function AdReport() {
               </Col>
             </Row>
 
-            <Card title={`数据明细（共 ${filteredData.length} 条）`}>
-              <AntTable
-                columns={columns}
-                dataSource={filteredData}
-                rowKey={(row) => `${row.date}-${row.campaign_id}`}
-                pagination={{ pageSize: 10 }}
-                scroll={{ y: 400 }}
-                size="small"
-              />
-            </Card>
+            <AdDetailTable data={filteredData} />
           </>
         )}
       </Card>

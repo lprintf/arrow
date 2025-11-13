@@ -63,7 +63,7 @@ docker compose -f compose.yml -f compose.dev.yml up -d
 cd frontend
 
 # 修改代码后构建
-npm run build
+pnpm run build
 
 # 刷新浏览器即可看到更新
 ```
