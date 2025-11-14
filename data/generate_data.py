@@ -52,18 +52,54 @@ def generate_base_metrics():
     }
 
 
-def generate_ad_report(num_campaigns=100, num_ad_sets_per_campaign=5, num_ads_per_ad_set=3, num_days=30):
+def generate_lifecycle(start_date, end_date, min_days=30, max_days=365):
+    """
+    为广告对象生成生命周期（新建和关停时间）
+
+    Args:
+        start_date: 数据起始日期
+        end_date: 数据结束日期
+        min_days: 最短生命周期天数
+        max_days: 最长生命周期天数
+
+    Returns:
+        tuple: (object_start_date, object_end_date)
+    """
+    total_days = (end_date - start_date).days
+
+    # 随机选择对象的启动时间（在数据时间范围内）
+    max_start_offset = max(0, total_days - min_days)
+    start_offset = random.randint(0, max_start_offset)
+    object_start = start_date + timedelta(days=start_offset)
+
+    # 随机选择生命周期长度
+    remaining_days = (end_date - object_start).days
+    lifecycle_days = random.randint(min_days, min(max_days, remaining_days))
+
+    # 80%的对象会在数据期内关停，20%持续到最后
+    if random.random() < 0.8:
+        object_end = object_start + timedelta(days=lifecycle_days)
+        object_end = min(object_end, end_date)
+    else:
+        object_end = end_date
+
+    return object_start.date(), object_end.date()
+
+
+def generate_ad_report(num_campaigns=100, num_ad_sets_per_campaign=5, num_ads_per_ad_set=3, num_days=365):
     """
     生成广告日报表数据（最细粒度：ad层级）
 
     只生成 ad 层级的数据，包含 campaign_id 和 ad_set_id 字段用于聚合。
     前端可以通过聚合来计算 ad_set 和 campaign 层级的指标，测试聚合性能。
 
+    每个广告对象（campaign/ad_set/ad）都有生命周期，模拟新建和关停效果。
+
     Args:
         num_campaigns: 广告系列数量
         num_ad_sets_per_campaign: 每个系列包含的广告组数量
         num_ads_per_ad_set: 每个广告组包含的广告数量
-        num_days: 天数
+        num_days: 天数（默认365天，一年）
 
     Returns:
         pyarrow.Table: ad 层级的 Arrow 表格
@@ -71,15 +107,16 @@ def generate_ad_report(num_campaigns=100, num_ad_sets_per_campaign=5, num_ads_pe
     total_ad_sets = num_campaigns * num_ad_sets_per_campaign
     total_ads = total_ad_sets * num_ads_per_ad_set
 
-    print(f"生成广告日报表数据（最细粒度 - ad 层级）:")
+    print(f"生成广告日报表数据（最细粒度 - ad 层级，包含生命周期）:")
     print(f"  - {num_campaigns}个系列(campaign)")
     print(f"  - {total_ad_sets}个广告组(ad_set)")
     print(f"  - {total_ads}个广告(ad)")
-    print(f"  - 共 {total_ads * num_days:,}条记录 (ads × {num_days}天)")
+    print(f"  - 时间范围: {num_days}天")
 
     # 生成日期范围
-    start_date = datetime.now() - timedelta(days=num_days)
-    dates = [(start_date + timedelta(days=i)).date() for i in range(num_days)]
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=num_days - 1)
+    all_dates = [(start_date + timedelta(days=i)).date() for i in range(num_days)]
 
     # 定义广告系列类型
     campaign_types = ['search', 'display', 'video', 'shopping']
@@ -90,32 +127,59 @@ def generate_ad_report(num_campaigns=100, num_ad_sets_per_campaign=5, num_ads_pe
     ad_set_id_counter = 1
     ad_id_counter = 1
 
+    total_records_estimate = 0
+
     for campaign_id in range(1, num_campaigns + 1):
         advertiser_id = (campaign_id - 1) // 10 + 1  # 每10个系列属于一个广告主
         campaign_type = random.choice(campaign_types)
+
+        # 为campaign生成生命周期
+        campaign_start, campaign_end = generate_lifecycle(start_date, end_date, min_days=60, max_days=365)
 
         # 为该系列生成广告组
         for _ in range(num_ad_sets_per_campaign):
             ad_set_id = ad_set_id_counter
             ad_set_id_counter += 1
 
+            # ad_set的生命周期必须在campaign生命周期内
+            ad_set_start_date = datetime.strptime(str(campaign_start), '%Y-%m-%d')
+            ad_set_end_date = datetime.strptime(str(campaign_end), '%Y-%m-%d')
+            ad_set_start, ad_set_end = generate_lifecycle(
+                ad_set_start_date, ad_set_end_date, min_days=30, max_days=180
+            )
+
             # 为该广告组生成广告
             for _ in range(num_ads_per_ad_set):
                 ad_id = ad_id_counter
                 ad_id_counter += 1
 
-                # 为每个广告生成每日数据
-                for date in dates:
-                    metrics = generate_base_metrics()
-                    ads_data.append({
-                        'date': date,
-                        'advertiser_id': f"ADV{advertiser_id:04d}",
-                        'campaign_id': f"CMP{campaign_id:06d}",
-                        'campaign_type': campaign_type,
-                        'ad_set_id': f"ADS{ad_set_id:08d}",
-                        'ad_id': f"AD{ad_id:010d}",
-                        **metrics
-                    })
+                # ad的生命周期必须在ad_set生命周期内
+                ad_start_date = datetime.strptime(str(ad_set_start), '%Y-%m-%d')
+                ad_end_date = datetime.strptime(str(ad_set_end), '%Y-%m-%d')
+                ad_start, ad_end = generate_lifecycle(
+                    ad_start_date, ad_end_date, min_days=7, max_days=90
+                )
+
+                # 只为该广告的生命周期内生成数据
+                for date in all_dates:
+                    if ad_start <= date <= ad_end:
+                        metrics = generate_base_metrics()
+                        ads_data.append({
+                            'date': date,
+                            'advertiser_id': f"ADV{advertiser_id:04d}",
+                            'campaign_id': f"CMP{campaign_id:06d}",
+                            'campaign_type': campaign_type,
+                            'ad_set_id': f"ADS{ad_set_id:08d}",
+                            'ad_id': f"AD{ad_id:010d}",
+                            **metrics
+                        })
+                        total_records_estimate += 1
+
+        # 每处理10个campaign打印一次进度
+        if campaign_id % 10 == 0:
+            print(f"  进度: {campaign_id}/{num_campaigns} campaigns, 已生成 {total_records_estimate:,} 条记录")
+
+    print(f"  - 实际生成: {len(ads_data):,}条记录（考虑生命周期后）")
 
     # 定义 Arrow schema，明确指定字段类型
     schema = pa.schema([
@@ -147,7 +211,88 @@ def generate_ad_report(num_campaigns=100, num_ad_sets_per_campaign=5, num_ads_pe
     print(f"  - 记录数: {len(ads_data):,}条")
     print(f"  - 内存大小: {ads_table.nbytes / 1024 / 1024:.2f} MB")
 
-    return ads_table
+    return ads_table, ads_data
+
+
+def save_ads_by_month(ads_data, output_dir):
+    """
+    将广告数据按月分片保存
+
+    Args:
+        ads_data: 广告数据列表
+        output_dir: 输出目录
+    """
+    import os
+    from collections import defaultdict
+
+    # 按月份分组数据
+    monthly_data = defaultdict(list)
+    for row in ads_data:
+        year_month = row['date'].strftime('%Y-%m')
+        monthly_data[year_month].append(row)
+
+    # 定义 Arrow schema
+    schema = pa.schema([
+        ('date', pa.date32()),
+        ('advertiser_id', pa.string()),
+        ('campaign_id', pa.string()),
+        ('campaign_type', pa.string()),
+        ('ad_set_id', pa.string()),
+        ('ad_id', pa.string()),
+        ('cost', pa.float32()),
+        ('impressions', pa.int32()),
+        ('reach', pa.int32()),
+        ('clicks', pa.int32()),
+        ('inline_link_clicks', pa.int32()),
+        ('outbound_clicks', pa.int32()),
+        ('landing_page_view', pa.int32()),
+        ('onsite_web_checkout', pa.int32()),
+        ('onsite_web_add_to_cart', pa.int32()),
+        ('conversions', pa.int32()),
+        ('onsite_web_checkout_value', pa.float32()),
+        ('onsite_web_add_to_cart_value', pa.float32()),
+        ('gmv', pa.float32()),
+    ])
+
+    # 创建分片目录
+    shards_dir = os.path.join(output_dir, 'ads_shards')
+    os.makedirs(shards_dir, exist_ok=True)
+
+    print(f"\n按月保存数据到: {shards_dir}")
+
+    # 保存每个月的数据
+    total_size = 0
+    for year_month in sorted(monthly_data.keys()):
+        month_data = monthly_data[year_month]
+        month_table = pa.Table.from_pylist(month_data, schema=schema)
+
+        file_path = os.path.join(shards_dir, f'ads_{year_month}.arrow')
+        with pa.OSFile(file_path, 'wb') as sink:
+            with pa.ipc.new_file(sink, month_table.schema) as writer:
+                writer.write_table(month_table)
+
+        file_size = os.path.getsize(file_path)
+        total_size += file_size
+        print(f"  - {year_month}: {len(month_data):,} 条记录, {file_size / 1024 / 1024:.2f} MB")
+
+    print(f"  - 总大小: {total_size / 1024 / 1024:.2f} MB")
+
+    # 保存分片元数据
+    metadata = {
+        'months': sorted(monthly_data.keys()),
+        'total_records': len(ads_data),
+        'total_size_mb': total_size / 1024 / 1024,
+        'schema': str(schema),
+    }
+
+    import json
+    metadata_path = os.path.join(shards_dir, 'metadata.json')
+    with open(metadata_path, 'w') as f:
+        json.dump(metadata, f, indent=2)
+
+    print(f"  - 元数据已保存: {metadata_path}")
+
+    return sorted(monthly_data.keys())
 
 
 def generate_user_sku_logs(num_users=10000, num_skus=5000, num_events=1000000,
@@ -258,36 +403,44 @@ def main():
     output_dir = os.path.dirname(os.path.abspath(__file__))
 
     print("=" * 60)
-    print("开始生成测试数据")
+    print("开始生成测试数据（一年数据，百万级别，包含生命周期）")
     print("=" * 60)
 
-    # 生成广告日报表（只生成最细粒度的 ad 层级）
-    print("\n1. 生成广告日报表数据（ad 层级）...")
-    ads_table = generate_ad_report(
-        num_campaigns=100,
-        num_ad_sets_per_campaign=5,
-        num_ads_per_ad_set=3,
-        num_days=30
+    # 生成广告日报表（一年数据，百万级别，包含生命周期）
+    print("\n1. 生成广告日报表数据（ad 层级，一年数据，百万级别）...")
+    ads_table, ads_data = generate_ad_report(
+        num_campaigns=500,           # 500个广告系列
+        num_ad_sets_per_campaign=10, # 每个系列10个广告组
+        num_ads_per_ad_set=5,        # 每个广告组5个广告
+        num_days=365                 # 一年数据
     )
+    # 预计：500 × 10 × 5 = 25,000 个广告
+    # 考虑生命周期后，约 25,000 × 45 天 ≈ 1,125,000 条记录
 
-    # 保存 Ads 表
+    # 保存全量数据（用于兼容性）
     ads_path = os.path.join(output_dir, 'ads.arrow')
     with pa.OSFile(ads_path, 'wb') as sink:
         with pa.ipc.new_file(sink, ads_table.schema) as writer:
             writer.write_table(ads_table)
-    print(f"\n保存到: {ads_path}")
+    print(f"\n全量数据已保存: {ads_path}")
     print(f"文件大小: {os.path.getsize(ads_path) / 1024 / 1024:.2f} MB")
+
+    # 按月分片保存
+    print("\n2. 按月分片保存数据...")
+    months = save_ads_by_month(ads_data, output_dir)
+    print(f"\n分片保存完成，共 {len(months)} 个月份")
+
     print("\n前端可以通过聚合 campaign_id 或 ad_set_id 来计算上层指标")
 
     # 生成用户-SKU互动日志
-    print("\n2. 生成用户-SKU互动日志数据...")
+    print("\n3. 生成用户-SKU互动日志数据...")
     user_sku_logs = generate_user_sku_logs(
-        num_users=10000,
-        num_skus=5000,
-        num_events=100000,
-        num_campaigns=100,  # 与广告数据保持一致
-        num_ad_sets_per_campaign=5,
-        num_ads_per_ad_set=3
+        num_users=50000,     # 5万用户
+        num_skus=10000,      # 1万SKU
+        num_events=500000,   # 50万事件
+        num_campaigns=500,   # 与广告数据保持一致
+        num_ad_sets_per_campaign=10,
+        num_ads_per_ad_set=5
     )
     user_sku_logs_path = os.path.join(output_dir, 'user_sku_logs.arrow')
 
@@ -302,6 +455,13 @@ def main():
     print("\n" + "=" * 60)
     print("数据生成完成!")
     print("=" * 60)
+    print(f"\n数据概览:")
+    print(f"  - 广告数据: {len(ads_data):,} 条记录 ({len(months)} 个月份)")
+    print(f"  - 用户日志: 500,000 条记录")
+    print(f"\n分片文件位置: {os.path.join(output_dir, 'ads_shards')}")
+    print(f"  - 可通过 metadata.json 查看分片信息")
+    print(f"  - 前端默认只加载最后一个月份的数据")
+    print(f"  - 支持按需加载更多月份")
 
 
 if __name__ == '__main__':

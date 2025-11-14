@@ -1,0 +1,20 @@
+{
+  "months": [
+    "2024-11",
+    "2024-12",
+    "2025-01",
+    "2025-02",
+    "2025-03",
+    "2025-04",
+    "2025-05",
+    "2025-06",
+    "2025-07",
+    "2025-08",
+    "2025-09",
+    "2025-10",
+    "2025-11"
+  ],
+  "total_records": 621971,
+  "total_size_mb": 72.09931373596191,
+  "schema": "date: date32[day]\nadvertiser_id: string\ncampaign_id: string\ncampaign_type: string\nad_set_id: string\nad_id: string\ncost: float\nimpressions: int32\nreach: int32\nclicks: int32\ninline_link_clicks: int32\noutbound_clicks: int32\nlanding_page_view: int32\nonsite_web_checkout: int32\nonsite_web_add_to_cart: int32\nconversions: int32\nonsite_web_checkout_value: float\nonsite_web_add_to_cart_value: float\ngmv: float"
+}

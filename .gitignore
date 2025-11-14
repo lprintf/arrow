@@ -30,6 +30,11 @@ Thumbs.db
 
 # Data files (generated)
 data/*.arrow
+data/ads_shards/*.arrow
+data/*_test*.py
+data/test_*.py
+data/verify_*.py
+data/analyze_*.py
 
 # Environment
 .env
