@@ -475,6 +475,16 @@ export default function AdDetailTable({ data }: AdDetailTableProps) {
     }
   }
 
+  // 分页配置（遵循 Ant Design 最佳实践）
+  const paginationConfig = {
+    defaultPageSize: 20,
+    pageSizeOptions: ['20', '50', '100', '200'],
+    showSizeChanger: true,
+    showQuickJumper: true,
+    showTotal: (total: number, range: [number, number]) =>
+      `第 ${range[0]}-${range[1]} 条 / 共 ${total} 条`,
+  }
+
   const tabItems = [
     {
       key: 'ad_account',
@@ -484,7 +494,7 @@ export default function AdDetailTable({ data }: AdDetailTableProps) {
           columns={columns}
           dataSource={getCurrentTabData()}
           rowKey="id"
-          pagination={{ pageSize: 20 }}
+          pagination={paginationConfig}
           scroll={{ x: 1200, y: 400 }}
           size="small"
           rowSelection={{
@@ -511,7 +521,7 @@ export default function AdDetailTable({ data }: AdDetailTableProps) {
           columns={columns}
           dataSource={getCurrentTabData()}
           rowKey="id"
-          pagination={{ pageSize: 20 }}
+          pagination={paginationConfig}
           scroll={{ x: 1200, y: 400 }}
           size="small"
           rowSelection={{
@@ -537,7 +547,7 @@ export default function AdDetailTable({ data }: AdDetailTableProps) {
           columns={columns}
           dataSource={getCurrentTabData()}
           rowKey="id"
-          pagination={{ pageSize: 20 }}
+          pagination={paginationConfig}
           scroll={{ x: 1200, y: 400 }}
           size="small"
           rowSelection={{
@@ -562,7 +572,7 @@ export default function AdDetailTable({ data }: AdDetailTableProps) {
           columns={columns}
           dataSource={getCurrentTabData()}
           rowKey="id"
-          pagination={{ pageSize: 20 }}
+          pagination={paginationConfig}
           scroll={{ x: 1200, y: 400 }}
           size="small"
           rowSelection={{
