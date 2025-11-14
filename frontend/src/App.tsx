@@ -11,14 +11,14 @@ function App() {
       <Layout style={{ minHeight: '100vh' }}>
         <Header style={{ display: 'flex', alignItems: 'center' }}>
           <div style={{ color: 'white', fontSize: '20px', fontWeight: 'bold', marginRight: '40px' }}>
-            Apache Arrow 性能测试
+            百万数据全栈性能测试
           </div>
           <Menu theme="dark" mode="horizontal" defaultSelectedKeys={['ad-report']} style={{ flex: 1, minWidth: 0 }}>
             <Menu.Item key="ad-report">
-              <Link to="/">广告日报表分析</Link>
+              <Link to="/">稠密数据场景（百万级）</Link>
             </Menu.Item>
             <Menu.Item key="user-sku-logs">
-              <Link to="/user-sku-logs">用户-SKU互动日志</Link>
+              <Link to="/user-sku-logs">稀疏数据场景（代亿级）</Link>
             </Menu.Item>
           </Menu>
         </Header>
