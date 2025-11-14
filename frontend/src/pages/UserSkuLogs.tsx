@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Card, Row, Col, Statistic, Select, DatePicker, Spin, Alert, Table as AntTable, Tag } from 'antd'
+import { Card, Row, Col, Statistic, Select, DatePicker, Spin, Alert, Table as AntTable, Tag, Dropdown, Button, Checkbox, Space, InputNumber, Modal, Input } from 'antd'
+import { SettingOutlined, EyeOutlined, ColumnWidthOutlined, PushpinOutlined, ReloadOutlined } from '@ant-design/icons'
 import ReactECharts from 'echarts-for-react'
 import { fetchArrowData, tableToArray } from '../utils/arrow'
 import * as aq from 'arquero'
@@ -24,6 +25,40 @@ interface ParsedAttrs {
   discount?: number
 }
 
+interface ColumnConfig {
+  key: string
+  label: string
+  visible: boolean
+  width: number
+  fixed?: 'left' | 'right' | false
+  sortable?: boolean
+  isCustom?: boolean
+  expression?: string  // 自定义列的计算表达式
+}
+
+interface ViewConfig {
+  id: string
+  name: string
+  columns: ColumnConfig[]
+  createdAt: string
+}
+
+interface FilterCondition {
+  id: string
+  field: string
+  operator: 'equals' | 'contains' | 'greaterThan' | 'lessThan' | 'between'
+  value: any
+  value2?: any  // 用于 between 操作
+}
+
+const DEFAULT_COLUMNS: ColumnConfig[] = [
+  { key: 'ts', label: '时间', visible: true, width: 180, fixed: 'left', sortable: true },
+  { key: 'user_id', label: '用户ID', visible: true, width: 120, fixed: false, sortable: false },
+  { key: 'sku_id', label: 'SKU ID', visible: true, width: 120, fixed: false, sortable: false },
+  { key: 'event_type', label: '事件类型', visible: true, width: 120, fixed: false, sortable: false },
+  { key: 'attrs', label: '扩展属性', visible: true, width: 100, fixed: false, sortable: false },
+]
+
 export default function UserSkuLogs() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -31,6 +66,36 @@ export default function UserSkuLogs() {
   const [selectedEventType, setSelectedEventType] = useState<string | undefined>(undefined)
   const [dateRange, setDateRange] = useState<[Dayjs, Dayjs] | null>(null)
   const [expandedRowKeys, setExpandedRowKeys] = useState<string[]>([])
+
+  // 列配置状态
+  const [columnConfigs, setColumnConfigs] = useState<ColumnConfig[]>(DEFAULT_COLUMNS)
+  const [settingsVisible, setSettingsVisible] = useState(false)
+
+  // 自定义列状态
+  const [customColumnModalVisible, setCustomColumnModalVisible] = useState(false)
+  const [newColumnName, setNewColumnName] = useState('')
+  const [newColumnExpression, setNewColumnExpression] = useState('')
+
+  // 视图管理状态
+  const [savedViews, setSavedViews] = useState<ViewConfig[]>([])
+  const [viewModalVisible, setViewModalVisible] = useState(false)
+  const [newViewName, setNewViewName] = useState('')
+
+  // 高级筛选状态
+  const [filterConditions, setFilterConditions] = useState<FilterCondition[]>([])
+  const [filterModalVisible, setFilterModalVisible] = useState(false)
+
+  // 从 localStorage 加载已保存的视图
+  useEffect(() => {
+    const stored = localStorage.getItem('userSkuLogs_savedViews')
+    if (stored) {
+      try {
+        setSavedViews(JSON.parse(stored))
+      } catch {
+        console.error('Failed to parse saved views')
+      }
+    }
+  }, [])
 
   // 加载数据
   useEffect(() => {
@@ -79,11 +144,37 @@ export default function UserSkuLogs() {
     return data
   }, [rawData, selectedEventType, dateRange])
 
+  // 应用高级筛选
+  const advancedFilteredData = useMemo(() => {
+    if (filterConditions.length === 0) return filteredData
+
+    return filteredData.filter(row => {
+      return filterConditions.every(condition => {
+        const fieldValue = (row as any)[condition.field]
+
+        switch (condition.operator) {
+          case 'equals':
+            return fieldValue === condition.value
+          case 'contains':
+            return String(fieldValue).toLowerCase().includes(String(condition.value).toLowerCase())
+          case 'greaterThan':
+            return fieldValue > condition.value
+          case 'lessThan':
+            return fieldValue < condition.value
+          case 'between':
+            return fieldValue >= condition.value && fieldValue <= condition.value2
+          default:
+            return true
+        }
+      })
+    })
+  }, [filteredData, filterConditions])
+
   // 使用Arquero进行数据分析（仅基于主干字段，不解析attrs）
   const aggregatedData = useMemo(() => {
-    if (filteredData.length === 0) return null
+    if (advancedFilteredData.length === 0) return null
 
-    const dt = aq.from(filteredData)
+    const dt = aq.from(advancedFilteredData)
 
     // 事件类型统计
     const eventStats = dt
@@ -92,7 +183,7 @@ export default function UserSkuLogs() {
       .objects() as Array<{ event_type: string; count: number }>
 
     // 按小时统计事件分布
-    const hourlyData = filteredData.map(row => ({
+    const hourlyData = advancedFilteredData.map(row => ({
       ...row,
       hour: dayjs(row.ts).format('YYYY-MM-DD HH:00'),
     }))
@@ -143,7 +234,7 @@ export default function UserSkuLogs() {
       },
       topSkus,
     }
-  }, [filteredData])
+  }, [advancedFilteredData])
 
   // 事件分布饼图
   const eventPieOption = useMemo(() => {
@@ -224,60 +315,356 @@ export default function UserSkuLogs() {
     }
   }, [aggregatedData])
 
-  // 明细表格列
-  const columns = [
-    {
-      title: '时间',
-      dataIndex: 'ts',
-      key: 'ts',
-      width: 180,
-      render: (ts: string) => dayjs(ts).format('YYYY-MM-DD HH:mm:ss'),
-    },
-    { title: '用户ID', dataIndex: 'user_id', key: 'user_id', width: 120 },
-    { title: 'SKU ID', dataIndex: 'sku_id', key: 'sku_id', width: 120 },
-    {
-      title: '事件类型',
-      dataIndex: 'event_type',
-      key: 'event_type',
-      width: 120,
-      render: (type: string) => {
-        const colors: Record<string, string> = {
-          view: 'blue',
-          cart_add: 'orange',
-          purchase: 'green',
-        }
-        return <Tag color={colors[type]}>{type}</Tag>
-      },
-    },
-    {
-      title: '扩展属性',
-      key: 'attrs',
-      width: 100,
-      render: (_: any, row: UserSkuLogRow) => {
-        if (!row.attrs) return <Tag>无</Tag>
+  // 列配置管理函数
+  const toggleColumnVisibility = (key: string) => {
+    setColumnConfigs(prev =>
+      prev.map(col => col.key === key ? { ...col, visible: !col.visible } : col)
+    )
+  }
 
-        // 懒加载：仅当行展开时才解析JSON
-        if (!expandedRowKeys.includes(row.user_id + row.ts)) {
-          return <Tag color="cyan">有（点击查看）</Tag>
-        }
+  const updateColumnWidth = (key: string, width: number) => {
+    setColumnConfigs(prev =>
+      prev.map(col => col.key === key ? { ...col, width } : col)
+    )
+  }
 
+  const toggleColumnFixed = (key: string) => {
+    setColumnConfigs(prev =>
+      prev.map(col => {
+        if (col.key === key) {
+          const newFixed = col.fixed === false ? 'left' : col.fixed === 'left' ? 'right' : false
+          return { ...col, fixed: newFixed }
+        }
+        return col
+      })
+    )
+  }
+
+  const resetColumns = () => {
+    setColumnConfigs(DEFAULT_COLUMNS)
+  }
+
+  // 自定义列管理函数
+  const evaluateExpression = (expression: string, row: UserSkuLogRow): any => {
+    try {
+      // 解析 attrs JSON（如果存在）
+      let attrs: ParsedAttrs = {}
+      if (row.attrs) {
         try {
-          const attrs: ParsedAttrs = JSON.parse(row.attrs)
-          return (
-            <div style={{ fontSize: '12px' }}>
-              {Object.entries(attrs).map(([key, value]) => (
-                <div key={key}>
-                  <strong>{key}:</strong> {String(value)}
-                </div>
-              ))}
-            </div>
-          )
+          attrs = JSON.parse(row.attrs)
         } catch {
-          return <Tag color="red">解析失败</Tag>
+          // JSON解析失败，使用空对象
         }
-      },
-    },
-  ]
+      }
+
+      // 创建安全的计算上下文
+      const context = {
+        user_id: row.user_id,
+        sku_id: row.sku_id,
+        event_type: row.event_type,
+        ts: row.ts,
+        attrs: attrs,
+        // 辅助函数
+        Math: Math,
+        Date: Date,
+      }
+
+      // 使用 Function 构造器执行表达式（受限环境）
+      const func = new Function(...Object.keys(context), `return ${expression}`)
+      return func(...Object.values(context))
+    } catch (error) {
+      console.error('Expression evaluation failed:', error)
+      return 'Error'
+    }
+  }
+
+  const addCustomColumn = () => {
+    if (!newColumnName.trim() || !newColumnExpression.trim()) {
+      alert('请输入列名和表达式')
+      return
+    }
+
+    const newColumn: ColumnConfig = {
+      key: `custom_${Date.now()}`,
+      label: newColumnName,
+      visible: true,
+      width: 150,
+      fixed: false,
+      sortable: false,
+      isCustom: true,
+      expression: newColumnExpression,
+    }
+
+    setColumnConfigs(prev => [...prev, newColumn])
+    setCustomColumnModalVisible(false)
+    setNewColumnName('')
+    setNewColumnExpression('')
+  }
+
+  const removeCustomColumn = (key: string) => {
+    setColumnConfigs(prev => prev.filter(col => col.key !== key))
+  }
+
+  // 视图管理函数
+  const saveCurrentView = () => {
+    if (!newViewName.trim()) {
+      alert('请输入视图名称')
+      return
+    }
+
+    const newView: ViewConfig = {
+      id: `view_${Date.now()}`,
+      name: newViewName,
+      columns: columnConfigs,
+      createdAt: new Date().toISOString(),
+    }
+
+    const updatedViews = [...savedViews, newView]
+    setSavedViews(updatedViews)
+    localStorage.setItem('userSkuLogs_savedViews', JSON.stringify(updatedViews))
+
+    setViewModalVisible(false)
+    setNewViewName('')
+    alert(`视图 "${newViewName}" 已保存`)
+  }
+
+  const loadView = (viewId: string) => {
+    const view = savedViews.find(v => v.id === viewId)
+    if (view) {
+      setColumnConfigs(view.columns)
+      alert(`已加载视图 "${view.name}"`)
+    }
+  }
+
+  const deleteView = (viewId: string) => {
+    const updatedViews = savedViews.filter(v => v.id !== viewId)
+    setSavedViews(updatedViews)
+    localStorage.setItem('userSkuLogs_savedViews', JSON.stringify(updatedViews))
+  }
+
+  // 高级筛选管理函数
+  const addFilterCondition = () => {
+    const newCondition: FilterCondition = {
+      id: `filter_${Date.now()}`,
+      field: 'event_type',
+      operator: 'equals',
+      value: '',
+    }
+    setFilterConditions(prev => [...prev, newCondition])
+  }
+
+  const updateFilterCondition = (id: string, updates: Partial<FilterCondition>) => {
+    setFilterConditions(prev =>
+      prev.map(cond => cond.id === id ? { ...cond, ...updates } : cond)
+    )
+  }
+
+  const removeFilterCondition = (id: string) => {
+    setFilterConditions(prev => prev.filter(cond => cond.id !== id))
+  }
+
+  const clearAllFilters = () => {
+    setFilterConditions([])
+  }
+
+  // 明细表格列（基于配置动态生成）
+  const columns = useMemo(() => {
+    return columnConfigs
+      .filter(config => config.visible)
+      .map(config => {
+        const baseColumn: any = {
+          title: config.label,
+          dataIndex: config.key,
+          key: config.key,
+          width: config.width,
+          fixed: config.fixed || undefined,
+        }
+
+        // 根据列类型添加自定义渲染
+        if (config.key === 'ts') {
+          baseColumn.render = (ts: string) => dayjs(ts).format('YYYY-MM-DD HH:mm:ss')
+          baseColumn.sorter = (a: UserSkuLogRow, b: UserSkuLogRow) =>
+            new Date(a.ts).getTime() - new Date(b.ts).getTime()
+        } else if (config.key === 'event_type') {
+          baseColumn.render = (type: string) => {
+            const colors: Record<string, string> = {
+              view: 'blue',
+              cart_add: 'orange',
+              purchase: 'green',
+            }
+            return <Tag color={colors[type]}>{type}</Tag>
+          }
+        } else if (config.key === 'attrs') {
+          baseColumn.render = (_: any, row: UserSkuLogRow) => {
+            if (!row.attrs) return <Tag>无</Tag>
+
+            // 懒加载：仅当行展开时才解析JSON
+            if (!expandedRowKeys.includes(row.user_id + row.ts)) {
+              return <Tag color="cyan">有（点击查看）</Tag>
+            }
+
+            try {
+              const attrs: ParsedAttrs = JSON.parse(row.attrs)
+              return (
+                <div style={{ fontSize: '12px' }}>
+                  {Object.entries(attrs).map(([key, value]) => (
+                    <div key={key}>
+                      <strong>{key}:</strong> {String(value)}
+                    </div>
+                  ))}
+                </div>
+              )
+            } catch {
+              return <Tag color="red">解析失败</Tag>
+            }
+          }
+        }
+
+        // 自定义列的渲染
+        if (config.isCustom && config.expression) {
+          baseColumn.render = (_: any, row: UserSkuLogRow) => {
+            const result = evaluateExpression(config.expression!, row)
+            return <span>{String(result)}</span>
+          }
+        }
+
+        return baseColumn
+      })
+  }, [columnConfigs, expandedRowKeys])
+
+  // 列设置菜单
+  const columnSettingsMenu = (
+    <div style={{ padding: '12px', width: 320, maxHeight: 500, overflowY: 'auto' }}>
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontWeight: 'bold', marginBottom: 8, display: 'flex', alignItems: 'center' }}>
+          <EyeOutlined style={{ marginRight: 8 }} />
+          列可见性
+        </div>
+        <Space direction="vertical" style={{ width: '100%' }}>
+          {columnConfigs.map(col => (
+            <div key={col.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Checkbox
+                checked={col.visible}
+                onChange={() => toggleColumnVisibility(col.key)}
+              >
+                {col.label}
+                {col.isCustom && <Tag color="purple" style={{ marginLeft: 4 }}>自定义</Tag>}
+              </Checkbox>
+              {col.isCustom && (
+                <Button
+                  size="small"
+                  danger
+                  type="text"
+                  onClick={() => removeCustomColumn(col.key)}
+                >
+                  删除
+                </Button>
+              )}
+            </div>
+          ))}
+        </Space>
+        <Button
+          size="small"
+          type="dashed"
+          block
+          style={{ marginTop: 8 }}
+          onClick={() => setCustomColumnModalVisible(true)}
+        >
+          + 添加自定义列
+        </Button>
+      </div>
+
+      <div style={{ marginBottom: 16, borderTop: '1px solid #f0f0f0', paddingTop: 12 }}>
+        <div style={{ fontWeight: 'bold', marginBottom: 8, display: 'flex', alignItems: 'center' }}>
+          <ColumnWidthOutlined style={{ marginRight: 8 }} />
+          列宽度
+        </div>
+        <Space direction="vertical" style={{ width: '100%' }}>
+          {columnConfigs.filter(col => col.visible).map(col => (
+            <div key={col.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ flex: 1 }}>{col.label}</span>
+              <InputNumber
+                size="small"
+                min={80}
+                max={400}
+                value={col.width}
+                onChange={(value) => updateColumnWidth(col.key, value || 120)}
+                style={{ width: 80 }}
+              />
+            </div>
+          ))}
+        </Space>
+      </div>
+
+      <div style={{ marginBottom: 16, borderTop: '1px solid #f0f0f0', paddingTop: 12 }}>
+        <div style={{ fontWeight: 'bold', marginBottom: 8, display: 'flex', alignItems: 'center' }}>
+          <PushpinOutlined style={{ marginRight: 8 }} />
+          列固定
+        </div>
+        <Space direction="vertical" style={{ width: '100%' }}>
+          {columnConfigs.filter(col => col.visible).map(col => (
+            <div key={col.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ flex: 1 }}>{col.label}</span>
+              <Tag
+                color={col.fixed === 'left' ? 'blue' : col.fixed === 'right' ? 'green' : 'default'}
+                style={{ cursor: 'pointer', minWidth: 60, textAlign: 'center' }}
+                onClick={() => toggleColumnFixed(col.key)}
+              >
+                {col.fixed === 'left' ? '左固定' : col.fixed === 'right' ? '右固定' : '不固定'}
+              </Tag>
+            </div>
+          ))}
+        </Space>
+      </div>
+
+      <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 12, marginBottom: 16 }}>
+        <div style={{ fontWeight: 'bold', marginBottom: 8 }}>视图管理</div>
+        {savedViews.length === 0 ? (
+          <div style={{ color: '#999', fontSize: '12px', marginBottom: 8 }}>暂无保存的视图</div>
+        ) : (
+          <Space direction="vertical" style={{ width: '100%', marginBottom: 8 }}>
+            {savedViews.map(view => (
+              <div key={view.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span
+                  style={{ flex: 1, cursor: 'pointer', color: '#1890ff' }}
+                  onClick={() => loadView(view.id)}
+                >
+                  {view.name}
+                </span>
+                <Button
+                  size="small"
+                  danger
+                  type="text"
+                  onClick={() => deleteView(view.id)}
+                >
+                  删除
+                </Button>
+              </div>
+            ))}
+          </Space>
+        )}
+        <Button
+          size="small"
+          type="dashed"
+          block
+          onClick={() => setViewModalVisible(true)}
+        >
+          保存当前视图
+        </Button>
+      </div>
+
+      <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 12 }}>
+        <Button
+          icon={<ReloadOutlined />}
+          onClick={resetColumns}
+          block
+          type="default"
+        >
+          重置为默认
+        </Button>
+      </div>
+    </div>
+  )
 
   if (loading) {
     return (
@@ -333,7 +720,7 @@ export default function UserSkuLogs() {
             <Row gutter={16} style={{ marginBottom: 16 }}>
               <Col span={6}>
                 <Card>
-                  <Statistic title="总事件数" value={filteredData.length} />
+                  <Statistic title="总事件数" value={advancedFilteredData.length} />
                 </Card>
               </Col>
               <Col span={6}>
@@ -382,10 +769,45 @@ export default function UserSkuLogs() {
               </Col>
             </Row>
 
-            <Card title={`数据明细（共 ${filteredData.length} 条，已加载前50000条）`}>
+            <Card
+              title={`数据明细（共 ${advancedFilteredData.length} 条，已加载前50000条）`}
+              extra={
+                <Space>
+                  {filterConditions.length > 0 && (
+                    <Tag color="orange">
+                      {filterConditions.length} 个筛选条件
+                      <Button
+                        type="link"
+                        size="small"
+                        onClick={clearAllFilters}
+                        style={{ padding: '0 4px' }}
+                      >
+                        清除
+                      </Button>
+                    </Tag>
+                  )}
+                  <Button
+                    onClick={() => setFilterModalVisible(true)}
+                    type={filterConditions.length > 0 ? 'primary' : 'default'}
+                  >
+                    高级筛选
+                  </Button>
+                  <Dropdown
+                    overlay={columnSettingsMenu}
+                    trigger={['click']}
+                    open={settingsVisible}
+                    onOpenChange={setSettingsVisible}
+                  >
+                    <Button icon={<SettingOutlined />} type="text">
+                      列设置
+                    </Button>
+                  </Dropdown>
+                </Space>
+              }
+            >
               <AntTable
                 columns={columns}
-                dataSource={filteredData.slice(0, 1000)}
+                dataSource={advancedFilteredData.slice(0, 1000)}
                 rowKey={(row) => row.user_id + row.ts}
                 pagination={{ pageSize: 20 }}
                 scroll={{ y: 400 }}
@@ -408,6 +830,178 @@ export default function UserSkuLogs() {
           </>
         )}
       </Card>
+
+      {/* 自定义列创建模态框 */}
+      <Modal
+        title="添加自定义列"
+        open={customColumnModalVisible}
+        onOk={addCustomColumn}
+        onCancel={() => {
+          setCustomColumnModalVisible(false)
+          setNewColumnName('')
+          setNewColumnExpression('')
+        }}
+        width={600}
+      >
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: 'block', marginBottom: 8, fontWeight: 'bold' }}>列名</label>
+          <Input
+            placeholder="例如：转化率"
+            value={newColumnName}
+            onChange={(e) => setNewColumnName(e.target.value)}
+          />
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: 'block', marginBottom: 8, fontWeight: 'bold' }}>计算表达式</label>
+          <Input.TextArea
+            placeholder="例如：event_type === 'purchase' ? 1 : 0&#10;&#10;可用变量：user_id, sku_id, event_type, ts, attrs, Math, Date"
+            value={newColumnExpression}
+            onChange={(e) => setNewColumnExpression(e.target.value)}
+            rows={4}
+          />
+        </div>
+
+        <Alert
+          message="表达式示例"
+          description={
+            <div>
+              <div>• <code>event_type === 'purchase' ? 1 : 0</code> - 购买事件标记</div>
+              <div>• <code>attrs.price || 0</code> - 获取价格（如果存在）</div>
+              <div>• <code>attrs.quantity * (attrs.price || 0)</code> - 计算总金额</div>
+              <div>• <code>new Date(ts).getHours()</code> - 提取小时数</div>
+            </div>
+          }
+          type="info"
+          style={{ marginTop: 16 }}
+        />
+      </Modal>
+
+      {/* 视图保存模态框 */}
+      <Modal
+        title="保存当前视图"
+        open={viewModalVisible}
+        onOk={saveCurrentView}
+        onCancel={() => {
+          setViewModalVisible(false)
+          setNewViewName('')
+        }}
+        width={400}
+      >
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: 'block', marginBottom: 8, fontWeight: 'bold' }}>视图名称</label>
+          <Input
+            placeholder="例如：我的常用视图"
+            value={newViewName}
+            onChange={(e) => setNewViewName(e.target.value)}
+          />
+        </div>
+
+        <Alert
+          message="提示"
+          description="当前列配置（包括可见性、宽度、固定、自定义列）将被保存到此视图中"
+          type="info"
+        />
+      </Modal>
+
+      {/* 高级筛选模态框 */}
+      <Modal
+        title="高级筛选"
+        open={filterModalVisible}
+        onOk={() => setFilterModalVisible(false)}
+        onCancel={() => setFilterModalVisible(false)}
+        width={700}
+        footer={[
+          <Button key="clear" onClick={clearAllFilters} danger>
+            清除所有筛选
+          </Button>,
+          <Button key="close" type="primary" onClick={() => setFilterModalVisible(false)}>
+            关闭
+          </Button>,
+        ]}
+      >
+        <Space direction="vertical" style={{ width: '100%' }}>
+          {filterConditions.map(condition => (
+            <Card key={condition.id} size="small" style={{ backgroundColor: '#f5f5f5' }}>
+              <Row gutter={8} align="middle">
+                <Col span={6}>
+                  <Select
+                    value={condition.field}
+                    onChange={(value) => updateFilterCondition(condition.id, { field: value })}
+                    style={{ width: '100%' }}
+                    options={[
+                      { label: '用户ID', value: 'user_id' },
+                      { label: 'SKU ID', value: 'sku_id' },
+                      { label: '事件类型', value: 'event_type' },
+                      { label: '时间', value: 'ts' },
+                    ]}
+                  />
+                </Col>
+                <Col span={5}>
+                  <Select
+                    value={condition.operator}
+                    onChange={(value) => updateFilterCondition(condition.id, { operator: value })}
+                    style={{ width: '100%' }}
+                    options={[
+                      { label: '等于', value: 'equals' },
+                      { label: '包含', value: 'contains' },
+                      { label: '大于', value: 'greaterThan' },
+                      { label: '小于', value: 'lessThan' },
+                      { label: '范围', value: 'between' },
+                    ]}
+                  />
+                </Col>
+                <Col span={condition.operator === 'between' ? 5 : 10}>
+                  <Input
+                    value={condition.value}
+                    onChange={(e) => updateFilterCondition(condition.id, { value: e.target.value })}
+                    placeholder="值"
+                  />
+                </Col>
+                {condition.operator === 'between' && (
+                  <Col span={5}>
+                    <Input
+                      value={condition.value2 || ''}
+                      onChange={(e) => updateFilterCondition(condition.id, { value2: e.target.value })}
+                      placeholder="值2"
+                    />
+                  </Col>
+                )}
+                <Col span={3}>
+                  <Button
+                    danger
+                    type="text"
+                    onClick={() => removeFilterCondition(condition.id)}
+                  >
+                    删除
+                  </Button>
+                </Col>
+              </Row>
+            </Card>
+          ))}
+
+          <Button
+            type="dashed"
+            block
+            onClick={addFilterCondition}
+          >
+            + 添加筛选条件
+          </Button>
+        </Space>
+
+        <Alert
+          message="筛选说明"
+          description={
+            <div>
+              <div>• 所有筛选条件使用 AND 逻辑组合</div>
+              <div>• "包含" 操作不区分大小写</div>
+              <div>• "范围" 操作为闭区间 [值1, 值2]</div>
+            </div>
+          }
+          type="info"
+          style={{ marginTop: 16 }}
+        />
+      </Modal>
     </div>
   )
 }
