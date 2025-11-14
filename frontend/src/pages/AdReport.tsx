@@ -219,6 +219,9 @@ export default function AdReport() {
         cost: aq.op.sum('cost'),
         conversions: aq.op.sum('conversions'),
         gmv: aq.op.sum('gmv'),
+        campaigns: aq.op.distinct('campaign_id'),
+        adSets: aq.op.distinct('ad_set_id'),
+        ads: aq.op.distinct('ad_id'),
       })
       .orderby('date')
       .objects()
@@ -243,6 +246,9 @@ export default function AdReport() {
         totalCost: aq.op.sum('cost'),
         totalConversions: aq.op.sum('conversions'),
         totalGmv: aq.op.sum('gmv'),
+        totalCampaigns: aq.op.distinct('campaign_id'),
+        totalAdSets: aq.op.distinct('ad_set_id'),
+        totalAds: aq.op.distinct('ad_id'),
       })
       .object(0) as {
         totalImpressions: number
@@ -250,6 +256,9 @@ export default function AdReport() {
         totalCost: number
         totalConversions: number
         totalGmv: number
+        totalCampaigns: number
+        totalAdSets: number
+        totalAds: number
       }
 
     // 计算衍生指标
@@ -339,6 +348,47 @@ export default function AdReport() {
               shadowColor: 'rgba(0, 0, 0, 0.5)',
             },
           },
+        },
+      ],
+    }
+  }, [aggregatedData])
+
+  // 对象数量趋势图表配置
+  const objectCountChartOption = useMemo(() => {
+    if (!aggregatedData) return null
+
+    const { dailyStats } = aggregatedData
+
+    return {
+      title: { text: '每日对象数量趋势' },
+      tooltip: { trigger: 'axis' },
+      legend: { data: ['广告系列数', '广告组数', '广告数'] },
+      xAxis: {
+        type: 'category',
+        data: dailyStats.map((d: any) => d.date),
+      },
+      yAxis: {
+        type: 'value',
+        name: '数量',
+      },
+      series: [
+        {
+          name: '广告系列数',
+          type: 'line',
+          data: dailyStats.map((d: any) => d.campaigns),
+          smooth: true,
+        },
+        {
+          name: '广告组数',
+          type: 'line',
+          data: dailyStats.map((d: any) => d.adSets),
+          smooth: true,
+        },
+        {
+          name: '广告数',
+          type: 'line',
+          data: dailyStats.map((d: any) => d.ads),
+          smooth: true,
         },
       ],
     }
@@ -469,11 +519,40 @@ export default function AdReport() {
             </Row>
 
             <Row gutter={16} style={{ marginBottom: 16 }}>
+              <Col span={6}>
+                <Card>
+                  <Statistic title="广告系列数" value={aggregatedData.totals.totalCampaigns} />
+                </Card>
+              </Col>
+              <Col span={6}>
+                <Card>
+                  <Statistic title="广告组数" value={aggregatedData.totals.totalAdSets} />
+                </Card>
+              </Col>
+              <Col span={6}>
+                <Card>
+                  <Statistic title="广告数" value={aggregatedData.totals.totalAds} />
+                </Card>
+              </Col>
+              <Col span={6}>
+                <Card>
+                  <Statistic title="转化率" value={aggregatedData.totals.cvr.toFixed(2)} suffix="%" />
+                </Card>
+              </Col>
+            </Row>
+
+            <Row gutter={16} style={{ marginBottom: 16 }}>
               <Col span={16}>
                 {trendChartOption && <ReactECharts option={trendChartOption} style={{ height: 400 }} />}
               </Col>
               <Col span={8}>
                 {typeChartOption && <ReactECharts option={typeChartOption} style={{ height: 400 }} />}
+              </Col>
+            </Row>
+
+            <Row gutter={16} style={{ marginBottom: 16 }}>
+              <Col span={24}>
+                {objectCountChartOption && <ReactECharts option={objectCountChartOption} style={{ height: 300 }} />}
               </Col>
             </Row>
 
