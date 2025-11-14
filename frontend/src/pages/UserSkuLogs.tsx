@@ -534,7 +534,15 @@ export default function UserSkuLogs() {
 
   // 列设置菜单
   const columnSettingsMenu = (
-    <div style={{ padding: '12px', width: 320, maxHeight: 500, overflowY: 'auto' }}>
+    <div style={{
+      padding: '12px',
+      width: 320,
+      maxHeight: 500,
+      overflowY: 'auto',
+      backgroundColor: '#ffffff',
+      borderRadius: '8px',
+      boxShadow: '0 3px 6px -4px rgba(0, 0, 0, 0.12), 0 6px 16px 0 rgba(0, 0, 0, 0.08), 0 9px 28px 8px rgba(0, 0, 0, 0.05)'
+    }}>
       <div style={{ marginBottom: 16 }}>
         <div style={{ fontWeight: 'bold', marginBottom: 8, display: 'flex', alignItems: 'center' }}>
           <EyeOutlined style={{ marginRight: 8 }} />
