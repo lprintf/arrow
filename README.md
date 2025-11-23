@@ -31,13 +31,14 @@
 
 ### 前置要求
 
-确保已创建外部网络和Traefik代理：
+确保已创建外部网关网络：
 ```bash
 # 检查网络是否存在
-docker network ls | grep lprintf
+docker network ls | grep gateway
 
 # 如果不存在，创建网络
-docker network create lprintf
+docker network create gateway-http
+docker network create gateway-https
 ```
 
 ### 1. 生成测试数据
@@ -51,83 +52,73 @@ uv run --with pyarrow --with numpy generate_data.py
 - `ad_report.arrow` - 30,000条广告日报表记录（~2MB）
 - `user_sku_logs.arrow` - 100,000条用户-SKU互动日志（~5.5MB）
 
-### 2. 使用Docker Compose启动（通过Traefik代理）
+### 2. 选择部署模式
+
+项目已优化为 HTTP 和 HTTPS 独立部署结构：
+
+#### HTTP 部署（本地开发/测试）
 
 ```bash
-# 构建并启动所有服务
-docker compose up --build
+# 进入 HTTP 部署目录
+cd http
 
-# 或者后台运行
-docker compose up -d --build
+# 启动生产环境
+./start.sh
+
+# 或启动开发环境（支持热重载）
+./dev.sh
 ```
 
-启动后通过Traefik代理访问：
-- **前端应用**：https://arrow.127.0.0.1.sslip.io
-- **后端API**（通过前端nginx代理）：https://arrow.127.0.0.1.sslip.io/api/
+访问地址：
+- 生产环境：`http://arrow.${DOMAIN}`（需要 OIDC 认证）
+- 开发环境：`http://arrow-dev.${DOMAIN}`（绕过认证，可访问 /docs）
 
-注意：
-- 使用Traefik代理，无端口冲突
-- 自动HTTPS（通过127.0.0.1.sslip.io）
-- 如需使用自定义域名，设置环境变量：`DOMAIN=your-domain.com`
+详见 [http/README.md](./http/README.md)
+
+#### HTTPS 部署（生产环境/网关集成）
+
+```bash
+# 进入 HTTPS 部署目录
+cd https
+
+# 启动生产环境
+./start.sh
+
+# 或启动开发环境
+./dev.sh
+```
+
+访问地址：
+- 生产环境：`https://arrow.${DOMAIN}`（需要 OIDC 认证）
+- 开发环境：`https://arrow-dev.${DOMAIN}`（直连后端，绕过认证）
+
+详见 [https/README.md](./https/README.md)
 
 ### 3. 开发模式
 
-#### 方式一：Docker 热重载（推荐）
-
-使用 `compose.dev.yml` 避免频繁重新构建镜像：
+推荐使用 HTTP 部署的开发模式，支持代码热重载和绕过认证：
 
 ```bash
-# 首次构建镜像
-docker compose build
+cd http
+./dev.sh
+```
 
-# 使用开发模式启动（支持代码热重载）
-docker compose -f compose.yml -f compose.dev.yml up
+开发特性：
+- ✅ **后端热重载**：代码变更自动生效
+- ✅ **前端快速更新**：只需重新构建，无需重启容器
+- ✅ **绕过认证**：开发环境自动注入测试用户
+- ✅ **API 文档访问**：可访问 `/docs` 和 `/redoc`
 
-# 前端开发流程：
-# 1. 修改前端代码后，在本地构建
+前端开发流程：
+```bash
 cd frontend
-npm run build
-
-# 2. 刷新浏览器即可看到更新（无需重建镜像）
-
-# 后端开发流程：
-# 1. 修改后端代码
-# 2. uvicorn 会自动检测变化并重新加载（无需重启容器）
+pnpm run build
+# 刷新浏览器即可看到更新
 ```
 
-**开发模式特性**：
-- ✅ **后端热重载**：代码变更自动生效（通过 `--reload` 参数）
-- ✅ **前端快速更新**：挂载本地 `dist` 目录，只需 `npm run build` 即可
-- ✅ **无需重建镜像**：大幅提升开发效率
-- ✅ **通过Traefik访问**：https://arrow.127.0.0.1.sslip.io
-- ✅ **开发路由**：https://arrow-dev.127.0.0.1.sslip.io（用于API测试）
-- ✅ **FastAPI文档**：https://arrow.127.0.0.1.sslip.io/docs
+后端修改会自动热重载，无需手动操作。
 
-**API 测试**：
-
-```bash
-# 使用测试脚本验证 API
-python test-api.py
-
-# 或访问文档页面
-# https://arrow.127.0.0.1.sslip.io/docs
-```
-
-#### 方式二：本地原生开发
-
-```bash
-# 终端1 - 后端
-cd backend
-uv run --with fastapi --with uvicorn --with pyarrow uvicorn main:app --reload --port 8000
-
-# 终端2 - 前端
-cd frontend
-npm install  # 或 pnpm install
-npm run dev
-
-# 前端开发服务器运行在 http://localhost:5173
-# API请求会自动代理到后端 http://localhost:8000
-```
+详见 [http/dev.md](./http/dev.md)
 
 ## 项目结构
 
@@ -153,7 +144,14 @@ demo/arrow/
 │   ├── generate_data.py # 数据生成脚本
 │   ├── ad_report.arrow  # 生成的广告数据
 │   └── user_sku_logs.arrow  # 生成的日志数据
-├── compose.yml          # Docker编排配置
+├── http/                # HTTP 部署配置
+│   ├── docker-compose.yml
+│   ├── compose.dev.yml
+│   └── *.sh             # 部署脚本
+├── https/               # HTTPS 部署配置
+│   ├── docker-compose.yml
+│   ├── compose.dev.yml
+│   └── *.sh             # 部署脚本
 └── README.md
 ```
 

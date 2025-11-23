@@ -1,0 +1,38 @@
+services:
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME:-arrow-https}-backend
+    volumes:
+      - ../data:/app/data:ro
+    environment:
+      PYTHONUNBUFFERED: "1"
+    networks:
+      - gateway-https
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME:-arrow-https}-frontend
+    environment:
+      - BACKEND_HOST=${COMPOSE_PROJECT_NAME:-arrow-https}-backend
+    depends_on:
+      backend:
+        condition: service_started
+    networks:
+      - gateway-https
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.arrow.rule=Host(`arrow.${DOMAIN}`)
+      - traefik.http.routers.arrow.entrypoints=websecure
+      - traefik.http.routers.arrow.tls=true
+      - traefik.http.routers.arrow.middlewares=strip-user-headers@file,oidc-auth@file
+      - traefik.http.services.arrow.loadbalancer.server.port=80
+    restart: unless-stopped
+
+networks:
+  gateway-https:
+    external: true

@@ -1,0 +1,19 @@
+#!/bin/bash
+set -e
+
+cd "$(dirname "$0")"
+
+echo "Starting Arrow HTTP deployment..."
+docker compose up -d
+
+echo ""
+echo "✓ Arrow HTTP deployment started"
+echo ""
+echo "Access URLs:"
+echo "  Production: http://arrow.\${DOMAIN}"
+echo ""
+echo "Useful commands:"
+echo "  docker compose logs -f         # View logs"
+echo "  docker compose ps              # Check status"
+echo "  ./stop.sh                      # Stop services"
+echo "  ./dev.sh                       # Start development mode"

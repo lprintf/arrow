@@ -1,0 +1,28 @@
+# 开发模式配置（Overlay 模式）
+# 使用方法: docker compose -f docker-compose.yml -f compose.dev.yml up
+
+services:
+  # 覆盖后端配置：启用热重载
+  backend:
+    command: uvicorn arrow_service.main:app --host 0.0.0.0 --port 8000 --reload --loop uvloop --log-level debug
+    volumes:
+      # 挂载代码目录实现热重载
+      - ../backend/arrow_service:/app/arrow_service:ro
+      - ../data:/app/data:ro
+    labels:
+      # 开发模式：添加一个不经过 OIDC 的直连路由
+      - traefik.enable=true
+      - traefik.http.routers.arrow-dev.rule=Host(`arrow-dev.${DOMAIN}`)
+      - traefik.http.routers.arrow-dev.entrypoints=websecure
+      - traefik.http.routers.arrow-dev.tls=true
+      - traefik.http.routers.arrow-dev.middlewares=strip-user-headers@file
+      - traefik.http.routers.arrow-dev.service=arrow-backend-dev-svc
+      - traefik.http.services.arrow-backend-dev-svc.loadbalancer.server.port=8000
+
+  # 覆盖前端配置：挂载构建后的静态文件
+  frontend:
+    volumes:
+      # 挂载本地构建的 dist 目录
+      - ../frontend/dist:/usr/share/nginx/html:ro
+      # 挂载 dev 模式 nginx 配置（包含 /docs 和 /redoc 代理）
+      - ../frontend/nginx.dev.conf.template:/etc/nginx/templates/default.conf.template:ro

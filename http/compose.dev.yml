@@ -1,0 +1,50 @@
+# 开发模式配置
+# 使用方法: docker compose -f docker-compose.yml -f compose.dev.yml up
+
+services:
+  # 开发环境的后端服务 - 独立容器，支持热重载
+  backend-dev:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME:-arrow-http}-backend-dev
+    command: uvicorn arrow_service.main:app --host 0.0.0.0 --port 8000 --reload --loop uvloop --log-level debug
+    environment:
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      # 挂载代码目录实现热重载
+      - ../backend/arrow_service:/app/arrow_service:ro
+      - ../data:/app/data:ro
+    networks:
+      - gateway-http
+    restart: unless-stopped
+
+  # 开发环境的前端服务 - 独立容器
+  frontend-dev:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME:-arrow-http}-frontend-dev
+    environment:
+      - BACKEND_HOST=backend-dev
+    volumes:
+      # 挂载构建后的静态文件
+      - ../frontend/dist:/usr/share/nginx/html:ro
+      # 使用开发版 nginx 配置（包含 API docs 代理）
+      - ../frontend/nginx.dev.conf.template:/etc/nginx/templates/default.conf.template:ro
+    depends_on:
+      - backend-dev
+    networks:
+      - gateway-http
+    labels:
+      - traefik.enable=true
+      # 开发路由：绕过身份认证（路由名使用项目变量避免冲突）
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME:-arrow-http}-dev.rule=Host(`arrow-dev.${DOMAIN}`)
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME:-arrow-http}-dev.entrypoints=web
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME:-arrow-http}-dev.middlewares=strip-user-headers@file
+      - traefik.http.services.${COMPOSE_PROJECT_NAME:-arrow-http}-dev.loadbalancer.server.port=80
+    restart: unless-stopped
+
+networks:
+  gateway-http:
+    external: true
