@@ -18,7 +18,7 @@ services:
       dockerfile: Dockerfile
     container_name: ${COMPOSE_PROJECT_NAME:-arrow-https}-frontend
     environment:
-      - BACKEND_HOST=${COMPOSE_PROJECT_NAME:-arrow-https}-backend
+      - BACKEND_HOST=${COMPOSE_PROJECT_NAME}-backend
     depends_on:
       backend:
         condition: service_started
