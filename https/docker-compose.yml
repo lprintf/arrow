@@ -3,27 +3,29 @@ services:
     build:
       context: ../backend
       dockerfile: Dockerfile
-    container_name: ${COMPOSE_PROJECT_NAME:-arrow-https}-backend
     volumes:
       - ../data:/app/data:ro
     environment:
       PYTHONUNBUFFERED: "1"
     networks:
-      - gateway-https
+      - default  # 内部网络
     restart: unless-stopped
 
   frontend:
     build:
       context: ../frontend
       dockerfile: Dockerfile
-    container_name: ${COMPOSE_PROJECT_NAME:-arrow-https}-frontend
     environment:
-      - BACKEND_HOST=${COMPOSE_PROJECT_NAME}-backend
+      - BACKEND_HOST=backend
     depends_on:
       backend:
         condition: service_started
     networks:
-      - gateway-https
+      default:
+        # 内部网络使用简单服务名
+      gateway-http:
+        aliases:
+          - ${COMPOSE_PROJECT_NAME}-frontend  # 外部网络使用唯一别名
     labels:
       - traefik.enable=true
       - traefik.http.routers.arrow.rule=Host(`arrow.${DOMAIN}`)
@@ -34,5 +36,7 @@ services:
     restart: unless-stopped
 
 networks:
+  default:
+    name: ${COMPOSE_PROJECT_NAME:-arrow-https}_internal
   gateway-https:
     external: true
