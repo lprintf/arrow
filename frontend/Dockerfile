@@ -17,10 +17,12 @@ COPY src ./src
 # Build application
 RUN npm run build
 
-FROM nginx:1.25-alpine
+FROM nginx:1.27-alpine
 
-COPY nginx.conf.template /etc/nginx/templates/default.conf.template
+# nginx 配置通过 docker-compose volume 挂载到 /etc/nginx/templates/default.conf.template
+
 COPY --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 80
-CMD ["/docker-entrypoint.sh", "nginx", "-g", "daemon off;"]
+
+CMD ["nginx", "-g", "daemon off;"]

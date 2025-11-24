@@ -3,6 +3,8 @@ services:
     build:
       context: ../backend
       dockerfile: Dockerfile
+    # 生产环境使用 Granian（4 workers，极致性能）
+    command: granian arrow_service.main:app --interface asgi --host 0.0.0.0 --port 8000 --workers 4 --http 1 --backlog 2048 --loop uvloop --respawn-failed-workers
     volumes:
       - ../data:/app/data:ro
     environment:
@@ -17,6 +19,11 @@ services:
       dockerfile: Dockerfile
     environment:
       - BACKEND_HOST=backend
+      # Nginx 性能优化：设置 worker 进程数（生产环境默认 3）
+      - NGINX_WORKER_PROCESSES=${NGINX_WORKER_PROCESSES:-3}
+    volumes:
+      # nginx 配置挂载到 default.conf.template（覆盖 nginx 默认配置）
+      - ../frontend/nginx.conf.template:/etc/nginx/templates/default.conf.template:ro
     depends_on:
       backend:
         condition: service_started

@@ -16,4 +16,13 @@ COPY arrow_service ./arrow_service
 EXPOSE 8000
 
 # Start application
-CMD ["uvicorn", "arrow_service.main:app", "--host", "0.0.0.0", "--port", "8000", "--loop", "uvloop"]
+# Granian 配置：极致性能（Rust 实现 + 多进程 + uvloop）
+CMD ["granian", "arrow_service.main:app", \
+     "--interface", "asgi", \
+     "--host", "0.0.0.0", \
+     "--port", "8000", \
+     "--workers", "4", \
+     "--http", "1", \
+     "--backlog", "2048", \
+     "--loop", "uvloop", \
+     "--respawn-failed-workers"]
