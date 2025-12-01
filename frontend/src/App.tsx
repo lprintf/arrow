@@ -1,9 +1,12 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Link } from 'react-router-dom'
-import { Layout, Menu } from 'antd'
-import AdReport from './pages/AdReport'
-import UserSkuLogs from './pages/UserSkuLogs'
+import { Layout, Menu, Spin } from 'antd'
 
 const { Header, Content } = Layout
+
+// 路由级懒加载
+const AdReport = lazy(() => import('./pages/AdReport'))
+const UserSkuLogs = lazy(() => import('./pages/UserSkuLogs'))
 
 function App() {
   return (
@@ -23,10 +26,21 @@ function App() {
           </Menu>
         </Header>
         <Content style={{ padding: '24px', background: '#f0f2f5' }}>
-          <Routes>
-            <Route path="/" element={<AdReport />} />
-            <Route path="/user-sku-logs" element={<UserSkuLogs />} />
-          </Routes>
+          <Suspense fallback={
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: '60vh'
+            }}>
+              <Spin size="large" tip="加载中..." />
+            </div>
+          }>
+            <Routes>
+              <Route path="/" element={<AdReport />} />
+              <Route path="/user-sku-logs" element={<UserSkuLogs />} />
+            </Routes>
+          </Suspense>
         </Content>
       </Layout>
     </BrowserRouter>
